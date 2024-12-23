@@ -8,7 +8,7 @@ import sys
 
 # Client configuration
 if(len(sys.argv) < 2):
-    print("Provide interface name!")
+    print("[ERROR] Provide interface name!")
     exit(1)
 
 macs = {
@@ -19,9 +19,10 @@ macs = {
 
 iface = sys.argv[1]
 client_mac = macs[sys.argv[1]]
-transaction_id = random.randint(1, 0xFFFFFFFF)  # Random transaction ID
 
-RETRY_DISCOVER = 10
+dhcp_server_id = None
+
+RETRY_DISCOVER_TIME = 10
 
 renewal_ts = 0
 discover_ts = 0
@@ -32,6 +33,7 @@ def validate_ts():
         global renewal_ts
         global discover_ts
         global offer_pkt
+        global dhcp_server_id
 
         if(renewal_ts != 0 and time.time() > renewal_ts):
             renewal_ts = 0
@@ -39,7 +41,8 @@ def validate_ts():
             print("[INFO] renewal_ts passed! DHCP Request sent!")
 
         if(discover_ts != 0 and time.time() > discover_ts):
-            discover_ts = time.time() + RETRY_DISCOVER
+            discover_ts = time.time() + RETRY_DISCOVER_TIME
+            dhcp_server_id = None
             send_dhcp_discover()
             print("[INFO] discover_ts passed! DHCP Discover sent!")
 
@@ -49,6 +52,7 @@ def validate_ts():
 
 def send_dhcp_discover():
     """Sends a DHCP Discover packet."""
+    transaction_id = random.randint(1, 0xFFFFFFFF)
     ether = Ether(src=client_mac, dst="ff:ff:ff:ff:ff:ff")
     ip = IP(src="0.0.0.0", dst="255.255.255.255")
     udp = UDP(sport=68, dport=67)
@@ -62,6 +66,7 @@ def send_dhcp_discover():
 
 def send_dhcp_request(offer_pkt, unicast=False):
     """Sends a DHCP Request packet based on the received DHCP Offer."""
+    transaction_id = random.randint(1, 0xFFFFFFFF)
     offered_ip = offer_pkt[BOOTP].yiaddr
     server_ip = offer_pkt[DHCP].options[3][1]  # Get the DHCP server IP address
     server_mac = offer_pkt[Ether].src
@@ -87,11 +92,17 @@ def handle_dhcp_response(pkt):
     global renewal_ts
     global discover_ts
     global offer_pkt
+    global dhcp_server_id
 
     if DHCP in pkt and pkt[DHCP].options[0][1] == 2:  # DHCP Offer
         print(f"[INFO] Received DHCP Offer with IP: {pkt[BOOTP].yiaddr}")
+        if dhcp_server_id:
+            print("[INFO] Skiping DHCP Offer (Wrong server id)")
+            return
+        dhcp_server_id = pkt[BOOTP].siaddr
         discover_ts = 0
         offer_pkt = pkt
+        
         send_dhcp_request(pkt)
 
     elif DHCP in pkt and pkt[DHCP].options[0][1] == 5:  # DHCP Ack

@@ -11,7 +11,9 @@ lease_time = 10  # Lease time in seconds (default: 10 seconds)
 dns_server = "8.8.8.8"
 ip_pool = [f"192.168.1.{i}" for i in range(10, 20)]  # IP pool for leasing
 allocated_ips = {}  # Stores {MAC: {"ip": IP, "expiry": timestamp}}
-iface = "vt-red"
+iface = "vt-blue"
+
+transactions = []
 
 def handle_dhcp(pkt):
     """Handles incoming DHCP packets (Discover and Request)."""
@@ -70,7 +72,7 @@ def send_dhcp_offer(pkt, offer_ip):
     ether = Ether(src=get_if_hwaddr(iface), dst=pkt[Ether].src)
     ip = IP(src=server_ip, dst="255.255.255.255")
     udp = UDP(sport=67, dport=68)
-    bootp = BOOTP(op=2, yiaddr=offer_ip, siaddr=server_ip, chaddr=pkt[BOOTP].chaddr)
+    bootp = BOOTP(op=2, yiaddr=offer_ip, xid=pkt[BOOTP].xid, siaddr=server_ip, chaddr=pkt[BOOTP].chaddr)
     dhcp = DHCP(options=[
         ("message-type", "offer"),
         ("subnet_mask", subnet_mask),
@@ -91,7 +93,7 @@ def send_dhcp_ack(pkt, ack_ip):
     ether = Ether(src=get_if_hwaddr(iface), dst=pkt[Ether].src)
     ip = IP(src=server_ip, dst="255.255.255.255")
     udp = UDP(sport=67, dport=68)
-    bootp = BOOTP(op=2, yiaddr=ack_ip, siaddr=server_ip, chaddr=pkt[BOOTP].chaddr)
+    bootp = BOOTP(op=2, yiaddr=ack_ip, xid=pkt[BOOTP].xid, siaddr=server_ip, chaddr=pkt[BOOTP].chaddr)
     dhcp = DHCP(options=[
         ("message-type", "ack"),
         ("subnet_mask", subnet_mask),
